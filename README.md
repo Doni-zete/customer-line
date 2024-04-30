@@ -1,6 +1,6 @@
-# Linhas de um cliente
+# Food Pagamentos
 
-Microserviço desenvolvido em Spring Boot para retornar as linhas de um cliente.
+Microserviço desenvolvido em Spring Boot crud de pagamento.
 
 ## Depencências
 
