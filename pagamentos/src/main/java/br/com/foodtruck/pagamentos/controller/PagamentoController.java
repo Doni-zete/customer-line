@@ -2,8 +2,11 @@ package br.com.foodtruck.pagamentos.controller;
 
 import br.com.foodtruck.pagamentos.dto.PagamentoDto;
 import br.com.foodtruck.pagamentos.service.PagamentoService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.web.PageableDefault;
@@ -24,6 +27,9 @@ public class PagamentoController {
   @Autowired
   private PagamentoService service;
 
+  @Autowired
+  private RabbitTemplate rabbitTemplate;
+
   @GetMapping
   public Page<PagamentoDto> listar(@PageableDefault(size = 10) Pageable paginacao) {
     return service.obterTodos(paginacao);
@@ -40,6 +46,9 @@ public class PagamentoController {
     @RequestBody @Valid PagamentoDto pagamentoDto, UriComponentsBuilder uriBuilder) {
     PagamentoDto pagamento = service.criarPagamento(pagamentoDto);
     URI endereco = uriBuilder.path("/pagamentos/{id}").buildAndExpand(pagamento.getId()).toUri();
+
+    Message message = new Message(("Criei um pagamento com o id " + pagamento.getId()).getBytes());
+    rabbitTemplate.send("pagamento.concluido", message);
     return ResponseEntity.created(endereco).body(pagamento);
   }
 
@@ -57,8 +66,13 @@ public class PagamentoController {
   }
 
   @PatchMapping("/{id}/confirmar")
-  public void confirmarPagamento(@PathVariable @NotNull Long id){
+  @CircuitBreaker(name = "atualizaPedido", fallbackMethod = "pagamentoAutorizadoComIntegracaoPendente")
+  public void confirmarPagamento(@PathVariable @NotNull Long id) {
     service.confirmarPagamento(id);
+  }
+
+  public void pagamentoAutorizadoComIntegracaoPendente(Long id, Exception e) {
+    service.alteraStatus(id);
   }
 
 }
